@@ -38,11 +38,12 @@ class Maze:
     IMPOSSIBLE_REWARD = -100
 
 
-    def __init__(self, maze, weights=None, random_rewards=False):
+    def __init__(self, maze, minotaur_stay = False, weights=None, random_rewards=False):
         """ Constructor of the environment Maze.
         """
         self.maze                     = maze;
         self.actions                  = self.__actions();
+        self.minotaur_actions         = self.__minotaur_actions(minotaur_stay);
         self.states, self.map         = self.__states();
         self.n_actions                = len(self.actions);
         self.n_states                 = len(self.states);
@@ -58,6 +59,47 @@ class Maze:
         actions[self.MOVE_UP]    = (-1,0);
         actions[self.MOVE_DOWN]  = (1,0);
         return actions;
+
+    def __minotaur_actions(self, minotaur_stay):
+        actions = dict()
+        actions[self.MOVE_LEFT]  = (0,-1)
+        actions[self.MOVE_RIGHT] = (0, 1)
+        actions[self.MOVE_UP]    = (-1,0)
+        actions[self.MOVE_DOWN]  = (1,0)
+        if minotaur_stay:
+            actions[self.STAY]   = (0, 0)
+        return actions
+    
+    def __minotaur_random_move(self, state):
+        moves = list()
+        # 1) check number of allowed moves (i.e. it cannot go outside the maze but it can go through walls)
+            # try all possible moves
+        for el in self.minotaur_actions:
+            # check for every move if its allowed
+            # add to a list only the allowed next states
+        # 2) select a random move between the available ones
+            # random element from a list (uniform random)
+        # 3) return selected state
+
+            row = state[0] + self.minotaur_actions[el][0];
+            col = state[1] + self.minotaur_actions[el][1];
+            # Is the future position an impossible one ?
+            hitting_maze_walls =  (row == -1) or (row == self.maze.shape[0]) or \
+                                  (col == -1) or (col == self.maze.shape[1])
+            if not hitting_maze_walls:
+                moves.append(el)
+            
+        # uniformly select any element from the list 
+        next_move = np.random.choice(moves) 
+        row = state[0] + self.minotaur_actions[next_move][0];
+        col = state[1] + self.minotaur_actions[next_move][1];
+
+        print("R-C: ",row,"-", col)
+
+        next_move = (row, col)
+
+        return next_move
+
 
     def __states(self):
         states = dict();
@@ -147,12 +189,18 @@ class Maze:
 
         return rewards;
 
-    def simulate(self, start, policy, method):
+# add minotaur starting point
+    def simulate(self, start, policy, method, minotaur_start = False):
+# add minotaur path
+
         if method not in methods:
             error = 'ERROR: the argument method must be in {}'.format(methods);
             raise NameError(error);
 
         path = list();
+
+        minotaur_path = list();
+
         if method == 'DynProg':
             # Deduce the horizon from the policy shape
             horizon = policy.shape[1];
@@ -161,12 +209,26 @@ class Maze:
             s = self.map[start];
             # Add the starting position in the maze to the path
             path.append(start);
+
+# Add staring position of the minotaur to the minotaur path
+            if minotaur_start:
+                minotaur_path.append(minotaur_start);
+                minotaur_state = minotaur_start;
+
             while t < horizon-1:
                 # Move to next state given the policy and the current state
                 next_s = self.__move(s,policy[s,t]);
                 # Add the position in the maze corresponding to the next state
                 # to the path
-                path.append(self.states[next_s])
+                path.append(self.states[next_s]);
+
+#Minotaur random move
+                if minotaur_start:
+                    next_minotaur = self.__minotaur_random_move(minotaur_state);
+                    minotaur_path.append(next_minotaur);
+
+                    minotaur_state = next_minotaur;
+
                 # Update time and state for next iteration
                 t +=1;
                 s = next_s;
@@ -190,9 +252,12 @@ class Maze:
                 # Add the position in the maze corresponding to the next state
                 # to the path
                 path.append(self.states[next_s])
+
+#Minotaur random move
+        
                 # Update time and state for next iteration
                 t +=1;
-        return path
+        return path, minotaur_path
 
 
     def show(self):
@@ -345,8 +410,8 @@ def draw_maze(maze):
         cell.set_height(1.0/rows);
         cell.set_width(1.0/cols);
 
-def animate_solution(maze, path):
-
+def animate_solution(maze, path, minotaur_path = False):
+    print(path)
     # Map a color to each cell in the maze
     col_map = {0: WHITE, 1: BLACK, 2: LIGHT_GREEN, -6: LIGHT_RED, -1: LIGHT_RED};
 
@@ -386,6 +451,12 @@ def animate_solution(maze, path):
     for i in range(len(path)):
         grid.get_celld()[(path[i])].set_facecolor(LIGHT_ORANGE)
         grid.get_celld()[(path[i])].get_text().set_text('Player')
+
+# Minotaur
+        if minotaur_path:
+            grid.get_celld()[(minotaur_path[i])].set_facecolor(LIGHT_PURPLE)
+            grid.get_celld()[(minotaur_path[i])].get_text().set_text('Minotaur')
+
         if i > 0:
             if path[i] == path[i-1]:
                 grid.get_celld()[(path[i])].set_facecolor(LIGHT_GREEN)
@@ -393,6 +464,12 @@ def animate_solution(maze, path):
             else:
                 grid.get_celld()[(path[i-1])].set_facecolor(col_map[maze[path[i-1]]])
                 grid.get_celld()[(path[i-1])].get_text().set_text('')
+
+            # clear minotaur path
+            if minotaur_path:
+                grid.get_celld()[(minotaur_path[i-1])].set_facecolor(col_map[maze[minotaur_path[i-1]]])
+                grid.get_celld()[(minotaur_path[i-1])].get_text().set_text('')
+
         display.display(fig)
         display.clear_output(wait=True)
         time.sleep(1)
