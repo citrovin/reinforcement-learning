@@ -598,7 +598,7 @@ def draw_policy(env, minotaur_position, policy, time):
 
     # Remove the axis ticks and add title title
     ax = plt.gca();
-    ax.set_title('The Maze');
+    ax.set_title('Optimal Policy at time t =%time' %time);
     ax.set_xticks([]);
     ax.set_yticks([]);
 
