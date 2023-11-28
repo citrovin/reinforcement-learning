@@ -387,13 +387,14 @@ class Maze:
 
     def simulate_minotaur(self, start, minotaur_start, policy, method):
         lost_won = False;
+        lost = False;
+        won = False;
 
         if method not in methods:
             error = 'ERROR: the argument method must be in {}'.format(methods);
             raise NameError(error);
 
         path = list();
-
         minotaur_path = list();
 
         if method == 'DynProg':
@@ -426,16 +427,57 @@ class Maze:
                 # lost
                 if (x_next == x_m and y_next == y_m):
                     s = self.state_map['lost'];
-                    print('LOST')
                     lost_won = True;
+                    lost = True;
                 else:
                     if (self.maze[x_next,y_next] == 2): #won
                         s = self.state_map['won'];
-                        print('WON');
                         lost_won = True;
+                        won = True;
                     else:
                         s = self.state_map[(x_next,y_next), (x_m,y_m)];
-        return path, minotaur_path
+        
+        if method == 'ValIter':
+            # Initialize current state, next state and time
+            t = 1;
+            state = self.map[start];
+            # Add the starting position in the maze to the path
+            path.append(start);
+
+            # Add staring position of the minotaur to the minotaur path
+            minotaur_path.append(minotaur_start);
+            minotaur_state = self.minotaur_map[minotaur_start];
+
+            s = self.state_map[(start,minotaur_start)];
+
+
+            # Loop while state is not the lost/won state
+            while not lost_won:
+                # Move to next state given the policy and the current state
+                state, (x_next,y_next) = self.__move(state,policy[s]);
+                # Add the position in the maze corresponding to the next state to the path
+                path.append((x_next,y_next));
+
+                # Minotaur random move
+                minotaur_state, (x_m,y_m) = self.__minotaur_random_move(minotaur_state);
+                minotaur_path.append((x_m,y_m));
+
+
+                # Update time and state for next iteration
+                t +=1;
+                # lost
+                if (x_next == x_m and y_next == y_m):
+                    s = self.state_map['lost'];
+                    lost_won = True;
+                    lost = True;
+                else:
+                    if (self.maze[x_next,y_next] == 2): #won
+                        s = self.state_map['won'];
+                        lost_won = True;
+                        won = True;
+                    else:
+                        s = self.state_map[(x_next,y_next), (x_m,y_m)];
+        return path, minotaur_path, lost, won
 
     def show(self):
         print('The states are :')
@@ -528,11 +570,6 @@ def dynamic_programming_minotaur(env, horizon):
     V[:, T]      = np.max(Q,1);
     policy[:, T] = np.argmax(Q,1);
 
-    print("Rewards shape [s,a]",r.shape)
-    print("Transition prob shape [s,s,a]", p.shape)
-    print("V:",V[:,T])
-    print("policy at T, action that max the rewards at the end", policy[:,T])
-
     # The dynamic programming bakwards recursion
     for t in range(T-1,-1,-1):
         # Update the value function acccording to the bellman equation
@@ -610,6 +647,62 @@ def draw_policy(env, minotaur_position, policy, time):
     
     
     return 0
+
+def value_iteration_minotaur(env, gamma, epsilon):
+    """ Solves the shortest path problem using value iteration
+        :input Maze env           : The maze environment in which we seek to
+                                    find the shortest path.
+        :input float gamma        : The discount factor.
+        :input float epsilon      : accuracy of the value iteration procedure.
+        :return numpy.array V     : Optimal values for every state at every
+                                    time, dimension S*T
+        :return numpy.array policy: Optimal time-varying policy at every state,
+                                    dimension S*T
+    """
+    # The value itearation algorithm requires the knowledge of :
+    # - Transition probabilities
+    # - Rewards
+    # - State space
+    # - Action space
+    # - The finite horizon
+    p         = env.transition_probabilities;
+    r         = env.minotaur_rewards;
+    n_states  = env.tot_states;
+    n_actions = env.n_actions;
+
+    # Required variables and temporary ones for the VI to run
+    V   = np.zeros(n_states);
+    Q   = np.zeros((n_states, n_actions));
+    BV  = np.zeros(n_states);
+    # Iteration counter
+    n   = 0;
+    # Tolerance error
+    tol = (1 - gamma)* epsilon/gamma;
+
+    # Initialization of the VI
+    for s in range(n_states):
+        for a in range(n_actions):
+            Q[s, a] = r[s, a] + gamma*np.dot(p[:,s,a],V);
+    BV = np.max(Q, 1);
+
+    # Iterate until convergence
+    while np.linalg.norm(V - BV) >= tol and n < 200:
+        # Increment by one the numbers of iteration
+        n += 1;
+        # Update the value function
+        V = np.copy(BV);
+        # Compute the new BV
+        for s in range(n_states):
+            for a in range(n_actions):
+                Q[s, a] = r[s, a] + gamma*np.dot(p[:,s,a],V);
+        BV = np.max(Q, 1);
+        # Show error
+        #print(np.linalg.norm(V - BV))
+
+    # Compute policy
+    policy = np.argmax(Q,1);
+    # Return the obtained policy
+    return V, policy;
 
 
 def value_iteration(env, gamma, epsilon):
@@ -747,11 +840,9 @@ def animate_solution(maze, path, minotaur_path = False):
         grid.get_celld()[(path[i])].set_facecolor(LIGHT_ORANGE)
         grid.get_celld()[(path[i])].get_text().set_text('Player')
 
-    # Minotaur
-        if minotaur_path:
-            grid.get_celld()[(minotaur_path[i])].set_facecolor(LIGHT_PURPLE)
-            grid.get_celld()[(minotaur_path[i])].get_text().set_text('Minotaur')
-
+        grid.get_celld()[(minotaur_path[i])].set_facecolor(LIGHT_PURPLE)
+        grid.get_celld()[(minotaur_path[i])].get_text().set_text('Minotaur')
+       
         if i > 0:
             if maze[path[i]] == 2:
                 grid.get_celld()[(path[i])].set_facecolor(LIGHT_GREEN)
@@ -761,6 +852,11 @@ def animate_solution(maze, path, minotaur_path = False):
                 #clear path
                 grid.get_celld()[(path[i-1])].set_facecolor(col_map[maze[path[i-1]]])
                 grid.get_celld()[(path[i-1])].get_text().set_text('')
+
+            # Minotaur
+            grid.get_celld()[(minotaur_path[i])].set_facecolor(LIGHT_PURPLE)
+            grid.get_celld()[(minotaur_path[i])].get_text().set_text('Minotaur')
+
             # clear minotaur path
             if minotaur_path and minotaur_path[i-1] != minotaur_path[i]:
                 grid.get_celld()[(minotaur_path[i-1])].set_facecolor(col_map[maze[minotaur_path[i-1]]])
@@ -769,6 +865,7 @@ def animate_solution(maze, path, minotaur_path = False):
                 if minotaur_path[i] == path[i]:
                     grid.get_celld()[(path[i])].set_facecolor(LIGHT_RED)
                     grid.get_celld()[(path[i])].get_text().set_text('Lost')
+
 
         display.display(fig)
         display.clear_output(wait=True)
