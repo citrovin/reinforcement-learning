@@ -1,3 +1,11 @@
+# KTH Royal Institute of Technology
+# EL2805 - Reinforcement Learning
+# Period 2 - 2023
+# Lab 1, ex 1
+# Valeria Grotto 200101266021
+# Dalim Whaby 
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 import time
@@ -5,7 +13,7 @@ import random
 from IPython import display
 
 # Implemented methods
-methods = ['DynProg', 'ValIter'];
+methods = ['DynProg', 'ValIter', 'Qlearning', 'sarsa'];
 
 # Some colours
 LIGHT_RED    = '#FFC4CC';
@@ -468,7 +476,9 @@ class Maze:
                 t +=1;
         return path, minotaur_path
 
-    def simulate_minotaur(self, start, minotaur_start, policy, method, key = False):
+    def simulate_minotaur(self, start, minotaur_start, policy, method, key = False, key_cell = (0,6)):
+        if(key):
+            self.maze[key_cell] = 3;
         lost_won = False;
         lost = False;
         won = False;
@@ -527,7 +537,6 @@ class Maze:
                             if self.maze[(x_next,y_next)]==3:
                                 key_val = 1;
                                 self.maze[(x_next,y_next)]=0; # since we got the key the cell is resetted
-                                print("key getted")
                             s = self.state_map[(x_next,y_next), (x_m,y_m), key_val];
                     
                     else: 
@@ -538,7 +547,7 @@ class Maze:
                         else:
                             s = self.state_map[(x_next,y_next), (x_m,y_m)];
         
-        if method == 'ValIter':
+        if method == 'ValIter' or method == 'Qlearning' or method == 'sarsa':
             # Initialize current state, next state and time
             t = 1;
             state = self.map[start];
@@ -585,7 +594,6 @@ class Maze:
                             if self.maze[(x_next,y_next)]==3:
                                 key_val = 1;
                                 self.maze[(x_next,y_next)]=0; # since we got the key the cell is resetted
-                                print("key getted")
                             s = self.state_map[(x_next,y_next), (x_m,y_m), key_val];
                     
                     else: 
@@ -596,8 +604,6 @@ class Maze:
                         else:
                             s = self.state_map[(x_next,y_next), (x_m,y_m)];
              
-            if method == 'Qlearning':
-                return 0
         return path, minotaur_path, lost, won
     
     def Q_learning_greedy(self, start, minotaur_start, key_cell, alpha_val = 2/3, gamma = 49/50, epsilon = 0.5, episodes = 1000, key = True, max_steps = 100):
@@ -698,6 +704,116 @@ class Maze:
         
         policy = [np.argmax(Q[s,:]) for s in range(n_states)]
         return Q, policy, vf_initial
+    
+    def epsilon_greedy_action(self, epsilon, Q, s):
+        n_actions = self.n_actions;
+        # select an action epsilon-greedily
+        # uniformly select any element from the list 
+        n = random.uniform(0, 1);
+        # epsilon-greedy part
+        if n < epsilon: # select random action from the action space
+            action = random.randint(0, n_actions-1);
+        else: # select best action
+            action = int(np.argmax(Q[s,:]))
+
+        return action
+
+    def sarsa(self, start, minotaur_start, key_cell, alpha_val = 2/3, gamma = 49/50, epsilon = 0.5, episodes = 1000, key = True, decreasing_epsilon = False,  delta = 2/3, max_steps = 100):
+        # value fn of the initial state
+        vf_initial = list()
+
+        # the rewards are needed
+        r = self.minotaur_rewards;
+
+        # 1. initialize Q
+        n_states  = self.tot_states;
+        n_actions = self.n_actions;
+
+        Q   = np.zeros((n_states, n_actions));
+        policy = np.zeros(n_states)
+        # Initialize # visits
+        n_visits = np.zeros((n_states,n_actions))
+        
+        for e in range(episodes):
+            # 0. initialize S
+            terminal = False; #terminal state
+
+            key_val = 0
+            s = self.state_map[start,minotaur_start, key_val]
+            state = self.map[start]
+            minotaur_state = self.minotaur_map[minotaur_start]
+            self.maze[key_cell]=3; # the key is present at the beginning
+            
+            # Initialize time
+            t = 1;
+        
+            # path = list();
+            # minotaur_path = list();
+            # path.append(state)
+            # minotaur_path.append(minotaur_state)
+
+            if decreasing_epsilon:
+                epsilon = 1/(e+1)**delta
+
+            # OBSERVATIONS
+            action = self.epsilon_greedy_action(epsilon, Q, s);
+
+            # Loop while state is not terminal, simulate an episode
+            while not terminal and t < max_steps:
+                # Increment # of visits of pair [s,action]
+                n_visits[s,action] += 1
+
+                #update learning rate
+                alpha = 1/(n_visits[s,action]**alpha_val)
+
+                # take action A then observe the reward and the next state s'
+                next_move, (x_next,y_next) = self.__move(state, action)
+                # path.append((x_next,y_next));
+                minotaur_next, (x_m,y_m) = self.__minotaur_random_move(minotaur_state)
+                # minotaur_path.append((x_m,y_m));
+
+                # Update time and state for next iteration
+                t +=1;
+                # lost
+                if (x_next == x_m and y_next == y_m):
+                    s_next = self.state_map['lost'];
+                    terminal = True;
+                else:
+                    if key:
+                        if (self.maze[x_next,y_next] == 2 and key_val): #won with key
+                            s_next = self.state_map['won'];
+                            terminal = True;
+                        else:
+                            if self.maze[(x_next,y_next)]==3:
+                                key_val = 1;
+                                self.maze[(x_next,y_next)]=0; # since we got the key the cell is resetted
+                            s_next = self.state_map[(x_next,y_next), (x_m,y_m), key_val];
+                    
+                    else: 
+                        if (self.maze[x_next,y_next] == 2): #won
+                            s_next = self.state_map['won'];
+                            terminal = True;
+                        else:
+                            s_next = self.state_map[(x_next,y_next), (x_m,y_m)];
+                
+                next_action = self.epsilon_greedy_action(epsilon, Q, s_next);
+                
+                # update Q function based on S and S'
+                Q[s,action] = Q[s,action] + alpha * (r[s,action] + gamma * Q[s_next,next_action]-Q[s,action])
+
+                
+
+                s = s_next;
+                state = next_move;
+                minotaur_state = minotaur_next;
+                action = next_action;
+
+            # update value_fn of the initial state
+            vf_initial.append(np.max(Q[self.state_map[start,minotaur_start,0],:]))
+        
+        policy = [np.argmax(Q[s,:]) for s in range(n_states)]
+        return Q, policy, vf_initial
+
 
     def show(self):
         print('The states are :')
