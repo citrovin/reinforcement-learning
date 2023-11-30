@@ -45,7 +45,7 @@ class Maze:
 
     # Reward values
     STEP_REWARD = -1
-    GOAL_REWARD = 500
+    GOAL_REWARD = 0
     IMPOSSIBLE_REWARD = -100000
     LOST_REWARD = -1000
     KEY_REWARD = 500
@@ -475,7 +475,7 @@ class Maze:
                         else:
                             if self.maze[(x_next,y_next)]==3:
                                 key_val = 1;
-                                self.maze[(x_next,y_next)]=0; # since we got the key the cell is resetted
+                                # self.maze[(x_next,y_next)]=0; # since we got the key the cell is resetted
                             s = self.state_map[(x_next,y_next), (x_m,y_m), key_val];
                     
                     else: 
@@ -531,7 +531,7 @@ class Maze:
                         else:
                             if self.maze[(x_next,y_next)]==3:
                                 key_val = 1;
-                                self.maze[(x_next,y_next)]=0; # since we got the key the cell is resetted
+                                # self.maze[(x_next,y_next)]=0; # since we got the key the cell is resetted
                             s = self.state_map[(x_next,y_next), (x_m,y_m), key_val];
                     
                     else: 
@@ -679,16 +679,10 @@ class Maze:
             key_val = 0
             s = self.state_map[start,minotaur_start, key_val]
             state = self.map[start]
-            minotaur_state = self.minotaur_map[minotaur_start]
             self.maze[key_cell]=3; # the key is present at the beginning
             
             # Initialize time
             t = 1;
-        
-            # path = list();
-            # minotaur_path = list();
-            # path.append(state)
-            # minotaur_path.append(minotaur_state)
 
             if decreasing_epsilon:
                 epsilon = 1/(e+1)**delta
@@ -706,12 +700,8 @@ class Maze:
 
                 # take action A then observe the reward and the next state s'
                 next_move, (x_next,y_next) = self.__move(state, action)
-                # path.append((x_next,y_next));
-                minotaur_next, (x_m,y_m) = self.__minotaur_random_move(s, key)
-                # minotaur_path.append((x_m,y_m));
+                _, (x_m,y_m) = self.__minotaur_random_move(s, key)
 
-                # Update time and state for next iteration
-                t +=1;
                 # lost
                 if (x_next == x_m and y_next == y_m):
                     s_next = self.state_map['lost'];
@@ -743,8 +733,10 @@ class Maze:
 
                 s = s_next;
                 state = next_move;
-                minotaur_state = minotaur_next;
                 action = next_action;
+            
+                # Update time and state for next iteration
+                t +=1;
 
             # update value_fn of the initial state
             vf_initial.append(np.max(Q[self.state_map[start,minotaur_start,0],:]))
