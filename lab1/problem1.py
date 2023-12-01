@@ -710,7 +710,6 @@ class Maze:
                 # take action A then observe the reward and the next state s'
                 next_move, (x_next,y_next) = self.__move(state, action)
                 _, (x_m,y_m) = self.__minotaur_random_move(s, key)
-                s_next = self.state_map[(x_next,y_next), (x_m,y_m)];
 
                 # state update
                 if (x_next == x_m and y_next == y_m):
