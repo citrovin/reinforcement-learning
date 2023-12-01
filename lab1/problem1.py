@@ -257,10 +257,11 @@ class Maze:
         # Compute the future position given current (state, action)
         row = self.states[state][0] + self.actions[action][0];
         col = self.states[state][1] + self.actions[action][1];
-        # Is the future position an impossible one ?
+        # Is the future position not possible (hit a wall) ?
         hitting_maze_walls =  (row == -1) or (row == self.maze.shape[0]) or \
                               (col == -1) or (col == self.maze.shape[1]) or \
                               (self.maze[row,col] == 1);
+
         # Based on the impossiblity check return the next state.
         if hitting_maze_walls:
             return state, self.states[state];
@@ -364,6 +365,7 @@ class Maze:
                                     next_state = self.state_map[(x_next,y_next),(x_m_next, y_m_next),key_val];
                                     transition_probabilities[next_state, state, a] = p_state;
                             else:
+                                # won
                                 if self.maze[x_next,y_next] == 2:
                                     next_state = self.state_map['won'];
                                     if ((x == x_m + 1) or (x == x_m-1) or (y == y_m+1) or (y == y_m-1)):
@@ -468,7 +470,7 @@ class Maze:
                     lost = True;
                 else:
                     if key:
-                        if (self.maze[x_next,y_next] == 2 and key_val): #won with key
+                        if (self.maze[x_next,y_next] == 2 and key_val): # won with key
                             s = self.state_map['won'];
                             lost_won = True;
                             won = True;
@@ -543,6 +545,7 @@ class Maze:
                             s = self.state_map[(x_next,y_next), (x_m,y_m)];
              
         return path, minotaur_path, lost, won
+    
     
     def Q_learning_greedy(self, start, minotaur_start, key_cell, alpha_val = 2/3, gamma = 49/50, epsilon = 0.5, episodes = 1000, key = True, max_steps = 100):
         '''
@@ -1088,3 +1091,36 @@ def animate_solution(maze, path, minotaur_path = False):
         display.display(fig)
         display.clear_output(wait=True)
         time.sleep(1)
+
+
+def compute_wining_probability(env, start=(0,0), minotaur_start=(6,5), runs=10000, horizon=30 , method='DynProg'):
+        '''
+        Computes the winning probability based on the number of runs and the horizon
+        :return list of probabilities for each horizon
+        '''
+        probabilities = []
+
+        for h in range(1, horizon+1):
+            V, policy = dynamic_programming_minotaur(env, h)
+            wins = 0
+            # for i in range(runs):
+            #     _, _, _, won = env.simulate_minotaur(start, minotaur_start, policy, 'DynProg')
+            #     if won:
+            #         wins += 1
+            # 
+            # prob = wins / runs
+            prob = get_probability(env, policy, start, minotaur_start, runs, method=method)
+            probabilities.append(prob)
+        return probabilities
+
+def get_probability(env, policy, start=(0,0), minotaur_start=(6,5), runs=10000, method = 'DynProg'):
+    '''
+    
+    '''
+    wins=0
+    for i in range(runs):
+        _, _, _, won = env.simulate_minotaur(start, minotaur_start, policy, method)
+        if won:
+            wins += 1
+                
+    return  wins / runs
