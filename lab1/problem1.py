@@ -386,34 +386,53 @@ class Maze:
 
 
     def __minotaur_rewards(self,key):
+        if not key:
+            key_val = 1
 
         rewards = np.zeros((self.tot_states, self.n_actions));
 
         # If the rewards are not described by a weight matrix
         for s in range(self.tot_states):
             for a in range(self.n_actions):
-                if(self.states_complete[s] == 'lost'):
-                    rewards[self.state_map['lost'],a] = self.LOST_REWARD;
-                elif (self.states_complete[s] == 'won'):
-                    rewards[s,a] = self.GOAL_REWARD;
-                else:
+                # if we are in a terminal state the reward is 0
+                if not (self.states_complete[s] == 'lost' or self.states_complete[s] == 'won'):
                     #actual state
                     if key:
-                        (x,y), _, key_val = self.states_complete[s]; 
+                        (x,y), (x_m,y_m), key_val = self.states_complete[s]; 
                     else:
-                        (x,y), _ = self.states_complete[s]; 
+                        (x,y), (x_m,y_m) = self.states_complete[s]; 
+                    
                     state = self.map[(x, y)];
-                    next_s, _ = self.__move(state,a); #agent next position
-                
-                    # Rewrd for hitting a wall
-                    if state == next_s and a != self.STAY:
-                        rewards[s,a] = self.IMPOSSIBLE_REWARD;
-                    else:
-                        #key
-                        if key and self.maze[self.states[next_s]] == 3 and key_val == 0:
-                            rewards[s,a] = self.KEY_REWARD;
-                        else: #step
-                            rewards[s,a] = self.STEP_REWARD;
+                    next_s, (x_next,y_next) = self.__move(state,a); #agent next position
+
+                    # for each minotaur action, check if we lose
+                    # minotaur_actions = self.__minotaur_possible_actions(self.minotaur_map[(x_m,y_m)],(x,y))
+                    for m_action in self.minotaur_actions:
+                        row = x_m + self.minotaur_actions[m_action][0];
+                        col = y_m + self.minotaur_actions[m_action][1];
+
+                        # Is the future position an impossible one ?
+                        hitting_maze_walls =  (row == -1) or (row == self.maze.shape[0]) or \
+                                            (col == -1) or (col == self.maze.shape[1])
+                        if not hitting_maze_walls:
+                            next_minotaur, (x_next_m,y_next_m) = self.__minotaur_move(self.minotaur_map[(x_m,y_m)], m_action)
+
+                        # if we lose -> lost reward
+                        if (x_next == x_next_m and y_next == y_next_m):
+                            rewards[s,a] = self.LOST_REWARD;
+                            # print('lost reward in:', s,"-", self.states_complete[s], self.states[next_s], self.maze[self.states[next_s]], key_val);
+                        elif not (rewards[s,a] == self.LOST_REWARD):
+                            # if we do not lose -> goal/step/key rewards
+                            if (self.maze[self.states[next_s]] == 2) and key_val == 1:
+                                rewards[s,a] = self.GOAL_REWARD;
+                            elif (self.maze[self.states[next_s]] == 3) and key_val == 0:
+                                rewards[s,a] = self.KEY_REWARD;
+                                #print('key reward in:', s,"-", self.states_complete[s], self.states[next_s], self.maze[self.states[next_s]], key_val)
+                            elif state == next_s and a != self.STAY:
+                                # Rewrd for hitting a wall
+                                rewards[s,a] = self.IMPOSSIBLE_REWARD;
+                            else:
+                                rewards[s,a] = self.STEP_REWARD;
 
         return rewards;
 
@@ -851,6 +870,69 @@ def dynamic_programming_minotaur(env, horizon):
         # The optimal action is the one that maximizes the Q function
         policy[:,t] = np.argmax(Q,1);
     return V, policy;
+
+def draw_rewards(env, minotaur_position, policy, time, key = False, key_val = 0):
+    maze = env.maze;
+    r = env.minotaur_rewards
+    (x_m,y_m) = minotaur_position;
+    # Map a color to each cell in the maze
+    col_map = {0: WHITE, 1: BLACK, 2: LIGHT_GREEN, 3:YELLOW, -6: LIGHT_RED, -1: LIGHT_RED};
+
+    # Give a color to each cell
+    rows,cols    = maze.shape;
+    colored_maze = [[col_map[maze[j,i]] for i in range(cols)] for j in range(rows)];
+
+    # Create figure of the size of the maze
+    fig = plt.figure(1, figsize=(cols,rows));
+
+    # Remove the axis ticks and add title title
+    ax = plt.gca();
+    ax.set_title('Rewards');
+    ax.set_xticks([]);
+    ax.set_yticks([]);
+
+    # Give a color to each cell
+    rows,cols    = maze.shape;
+    colored_maze = [[col_map[maze[j,i]] for i in range(cols)] for j in range(rows)];
+
+    # Create figure of the size of the maze
+    fig = plt.figure(1, figsize=(cols,rows))
+
+    # Create a table to color
+    grid = plt.table(cellText=None,
+                            cellColours=colored_maze,
+                            cellLoc='center',
+                            loc=(0,0),
+                            edges='closed');
+    # Modify the hight and width of the cells in the table
+    tc = grid.properties()['children']
+    for cell in tc:
+        cell.set_height(1.0/rows);
+        cell.set_width(1.0/cols);
+    
+    # rewards in every state in which the minotaur is in that position
+    for el in range(env.n_states):
+        (x,y) = env.states[el];
+        if((x!=x_m) or (y!=y_m)):
+            if(env.maze[x,y] != 2): # not in won cell
+                if key:
+                    state = env.state_map[(x,y),(x_m,y_m), key_val];
+                else:
+                    state = env.state_map[(x,y),(x_m,y_m)];
+                if time == -1:
+                    action = policy[state];
+                else:
+                    action = policy[state,time];
+                
+                reward = r[state, action]
+
+                grid.get_celld()[(x,y)].get_text().set_text(reward);
+
+    grid.get_celld()[(x_m,y_m)].set_facecolor(LIGHT_PURPLE)
+    # grid.get_celld()[(x_m,y_m)].get_text().set_text('Minotaur')
+    
+    
+    return 0
 
 def draw_policy(env, minotaur_position, policy, time, key = False, key_val = 0):
     maze = env.maze;
