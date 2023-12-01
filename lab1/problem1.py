@@ -1115,7 +1115,8 @@ def compute_wining_probability(env, start=(0,0), minotaur_start=(6,5), runs=1000
 
 def get_probability(env, policy, start=(0,0), minotaur_start=(6,5), runs=10000, method = 'DynProg'):
     '''
-    
+    This function gives you the probability of winning given a policy, method and number of runs
+    :return probability
     '''
     wins=0
     for i in range(runs):
