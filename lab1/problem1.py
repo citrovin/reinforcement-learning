@@ -1123,5 +1123,5 @@ def get_probability(env, policy, start=(0,0), minotaur_start=(6,5), runs=10000, 
         _, _, _, won = env.simulate_minotaur(start, minotaur_start, policy, method)
         if won:
             wins += 1
-                
+    print(f'wins: {wins} | runs: {runs}')
     return  wins / runs
