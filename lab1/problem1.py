@@ -13,6 +13,8 @@ import random
 import math
 from IPython import display
 
+from tqdm import tqdm
+
 # Implemented methods
 methods = ['DynProg', 'ValIter', 'Qlearning', 'sarsa'];
 
@@ -672,22 +674,26 @@ class Maze:
 
         Q   = np.zeros((n_states, n_actions));
         policy = np.zeros(n_states)
-        # Initialize # visits
+
+        # Initialize number of visits
         n_visits = np.zeros((n_states,n_actions))
         
-        for e in range(episodes):
+        for e in tqdm(range(episodes)):
             # 0. initialize S
-            terminal = False; #terminal state
+            # terminal state
+            terminal = False;
 
+            # reset the environment
             key_val = 0
-            s = self.state_map[start,minotaur_start, key_val]
+            s = self.state_map[start, minotaur_start, key_val]
             state = self.map[start]
             self.maze[key_cell]=3; # the key is present at the beginning
             
             # Initialize time
             t = 1;
-
+            
             if decreasing_epsilon:
+                # decrease epsilon
                 epsilon = 1/(e+1)**delta
 
             # OBSERVATIONS
@@ -704,36 +710,48 @@ class Maze:
                 # take action A then observe the reward and the next state s'
                 next_move, (x_next,y_next) = self.__move(state, action)
                 _, (x_m,y_m) = self.__minotaur_random_move(s, key)
+                s_next = self.state_map[(x_next,y_next), (x_m,y_m)];
 
-                # lost
+                # state update
                 if (x_next == x_m and y_next == y_m):
+                    # if the agent encounters the minotaur => s_next = lost and terminal = True
                     s_next = self.state_map['lost'];
                     terminal = True;
                 else:
                     if key:
-                        if (self.maze[x_next,y_next] == 2 and key_val): #won with key
+                        # if there is a key
+                        if (self.maze[x_next,y_next] == 2 and key_val):
+                            # if we have the key and we reach the exit => s_next = won and terminal = True
                             s_next = self.state_map['won'];
                             terminal = True;
                         else:
+                            # state update if we did not win
                             if self.maze[(x_next,y_next)]==3:
+                                # if we are in the field of the key => key_val = 1
                                 key_val = 1;
                                 #self.maze[(x_next,y_next)]=0; # since we got the key the cell is resetted
+
+                            # state update if we did not lose, wind
                             s_next = self.state_map[(x_next,y_next), (x_m,y_m), key_val];
                     
                     else: 
-                        if (self.maze[x_next,y_next] == 2): #won
+                        # if there is no key in the game
+                        if (self.maze[x_next,y_next] == 2): 
+                            # if the agent won
                             s_next = self.state_map['won'];
                             terminal = True;
                         else:
+                            # get next state if we did not win
                             s_next = self.state_map[(x_next,y_next), (x_m,y_m)];
                 
+                # update the action for the next iteration with epsilon-greedy
                 next_action = self.epsilon_greedy_action(epsilon, Q, s_next);
                 
                 # update Q function based on S and S'
                 Q[s,action] = Q[s,action] + alpha * (r[s,action] + gamma * Q[s_next,next_action]-Q[s,action])
 
                 
-
+                # update state and action for next iteration
                 s = s_next;
                 state = next_move;
                 action = next_action;
@@ -744,6 +762,7 @@ class Maze:
             # update value_fn of the initial state
             vf_initial.append(np.max(Q[self.state_map[start,minotaur_start,0],:]))
         
+        # extract the best policy from the Q function
         policy = [np.argmax(Q[s,:]) for s in range(n_states)]
         return Q, policy, vf_initial
 
