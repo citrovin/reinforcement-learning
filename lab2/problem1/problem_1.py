@@ -13,6 +13,8 @@
 #
 
 # Load packages
+import argparse
+
 import numpy as np
 import gym
 import torch
@@ -23,21 +25,7 @@ from DQN_agent import RandomAgent, DQNAgent, ExperienceReplayBuffer, DuelingDQNe
 import torch
 import torch.nn as nn
 import torch.optim as optim
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# Initialize enviroment
-env = gym.make('LunarLander-v2')
-
-# Parameters
-N_episodes = 550                             # Number of episodes [100,1000]
-discount_factor = 0.99                       # Value of the discount factor
-n_ep_running_average = 50                    # Running average of 50 episodes
-
-batch_size = 64                              # N, between 4-128,number of elements to sample from the exp buffer [4,128]
-buffer_length = 30000                        # L, between 5000-30000
-
-learning_rate = 0.001                        # usually 10^-3, 10^-4
+from tqdm import tqdm
 
 
 def running_average(x, N):
@@ -52,7 +40,15 @@ def running_average(x, N):
     return y
 
 # net_name is a parameter used to save the network weight and the plots with a specific name
-def train_enviroment(net_name, env, N_episodes, n_ep_running_average, buffer_length, batch_size, discount_factor, learning_rate, dueling = True):
+def train_enviroment(net_name, 
+                      env, 
+                      N_episodes, 
+                      n_ep_running_average, 
+                      buffer_length, 
+                      batch_size, 
+                      discount_factor, 
+                      learning_rate, 
+                      dueling = True):
   # Initialize the discrete Lunar Laner Environment
   env.reset()
 
@@ -72,7 +68,11 @@ def train_enviroment(net_name, env, N_episodes, n_ep_running_average, buffer_len
   episode_reward_list = []       # this list contains the total reward per episode
   episode_number_of_steps = []   # this list contains the number of steps per episode
 
-  agent = DQNAgent(n_actions, dim_state, discount_factor, learning_rate, dueling)
+  agent = DQNAgent(n_actions, 
+                    dim_state, 
+                    discount_factor, 
+                    learning_rate, 
+                    dueling)
 
   random_agent = RandomAgent(n_actions)
   ### Create Experience replay buffer ###
@@ -193,9 +193,7 @@ def train_enviroment(net_name, env, N_episodes, n_ep_running_average, buffer_len
 
   return n_ep_running_average, final_ep
 
-#train_enviroment('neural-network-1', env, N_episodes, n_ep_running_average, buffer_length, batch_size, discount_factor, learning_rate, dueling = True)
-
-def run_model(env,N_episodes, model):
+def run_model(env,N_episodes, model, device):
     env.reset()
 
     # Parameters
@@ -274,15 +272,127 @@ def run_model(env,N_episodes, model):
     plt.show()
 
 
-## TRAIN
-#train_enviroment('test', env, N_episodes, n_ep_running_average, buffer_length, batch_size, discount_factor, learning_rate, dueling = True)
+def plot_Q(model, steps=100, device='cpu'):
+  # Plot max{Q(s(y,w))}, with s(y,w)=(0,y,0,0,w,0,0,0)
+  # for y in range(0, 1.5, (1.5/1000)) and w in range(-pi, pi, (pi-(-pi))/1000) steps 1000
 
-## TEST THE MODEL
-N_episodes = 50
-# Load model
-path = "C:\\Users\\valeg\\Desktop\\ReinforcementLearning\\EL2805_lab2\\problem1\\neural-network-1.pth"
-model = torch.load(path, map_location=torch.device('cpu'))
-print('Network model: {}'.format(model))
+  # Qw(s,a) values
+  steps = steps
+  y_low, y_high = 0, 1.5
+  w_lower, w_upper = -np.pi, np.pi
+  y = np.linspace(y_low, y_high, steps)
+  w = np.linspace(w_lower, w_upper, steps)
 
-run_model(env, N_episodes, model)
+  # Compute the forward function for each combination of y_states and w_states
+  V = np.zeros((steps,steps))
+  actions = np.zeros((steps,steps))
 
+
+  for y_index, y_sample in enumerate(tqdm(y)):
+      for w_index, w_sample in enumerate(w):
+          # get next_state and reward
+          state = torch.tensor(np.array([0., y_sample, 0., 0., w_sample, 0., 0., 0.], dtype=np.float32)).to(device)
+          q_values = model(state)
+          
+          # save the values
+          actions[y_index,w_index] = q_values.argmax().item()
+          V[y_index,w_index] = q_values.max().item()
+
+  fig = plt.figure(figsize=(20, 16))
+
+  # Plotting the 3D graph of the values w.r.t. y and w
+  ax1 = fig.add_subplot(1, 2, 1, projection='3d')
+  x1 = y
+  y1 = w
+  X, Y = np.meshgrid(x1, y1)
+  Z = V
+  ax1.plot_surface(X, Y, Z, cmap='viridis')
+  ax1.set_title('Values of Q-network')
+  ax1.set_xlabel('y values')
+  ax1.set_ylabel('w values')
+
+  # Plotting the 3D graph of the actions w.r.t. y and w
+  ax2 = fig.add_subplot(1, 2, 2, projection='3d')
+  x2 = y
+  y2 = w
+  X, Y = np.meshgrid(x2, y2)
+  Z = actions
+  ax2.plot_surface(X, Y, Z, cmap='viridis')
+  ax2.set_title('Action of Q-Network')
+  ax2.set_xlabel('y values')
+  ax2.set_ylabel('w values')
+
+
+  path = 'images/q-values-and-corresponding-actions.png'
+  plt.savefig(path)
+
+
+  plt.tight_layout()
+  plt.show()
+
+
+def main():
+  parser = argparse.ArgumentParser(description='Your program description here')
+
+  
+  parser.add_argument('--run', default=True, help='Enable running')
+  parser.add_argument('--plot', default=True, help='Enable plotting of Q-Values')
+  parser.add_argument('--train', default=False, help='Enable training')
+  parser.add_argument('--device', default=None, help='Set the device')
+
+
+  args = parser.parse_args()
+
+  if args.device:
+    device=torch.device(args.device)
+  else:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+  print(f"Device: {device}")
+
+  # Initialize enviroment
+  env = gym.make('LunarLander-v2')
+
+  # Parameters
+  N_episodes = 550                             # Number of episodes [100,1000]
+  discount_factor = 0.99                       # Value of the discount factor
+  n_ep_running_average = 50                    # Running average of 50 episodes
+
+  batch_size = 64                              # N, between 4-128,number of elements to sample from the exp buffer [4,128]
+  buffer_length = 30000                        # L, between 5000-30000
+
+  learning_rate = 0.001                        # usually 10^-3, 10^-4
+
+
+  if args.train:
+    # TRAIN
+    print('--------- Training model ---------')
+    train_enviroment('neural-network-1', 
+                      env,
+                      N_episodes, 
+                      n_ep_running_average, 
+                      buffer_length, 
+                      batch_size, 
+                      discount_factor, 
+                      learning_rate, 
+                      dueling = True)   
+
+  
+  # Load model
+  path = "neural-network-1.pth"
+  model = torch.load(path, map_location=device)
+  print('Network model: {}'.format(model))
+
+  if args.run:
+    ## TEST THE MODEL
+    N_episodes = 50
+    print('--------- Running model ---------')
+    run_model(env, N_episodes, model, device=device)
+
+  if args.plot:
+    print('--------- Plotting Q-Values ---------')
+    plot_Q(model=model)
+
+
+if __name__ == '__main__':
+  main()
