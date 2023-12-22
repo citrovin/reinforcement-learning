@@ -35,7 +35,7 @@ def running_average(x, N):
     return y
 
 # Load model
-path = "C:\\Users\\valeg\\Desktop\\ReinforcementLearning\\EL2805_lab2\\problem1\\neural-network-1.pth"
+path = "neural-network-1.pth"
 model = torch.load(path, map_location=torch.device('cpu'))
 print('Network model: {}'.format(model))
 
